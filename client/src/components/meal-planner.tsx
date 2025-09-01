@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, Wand2, History, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Wand2, History, Star, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
@@ -8,6 +8,7 @@ import type { MealPlan, Recipe } from "@shared/schema";
 
 export default function MealPlanner() {
   const [currentWeek, setCurrentWeek] = useState("2024-01-15");
+  const [showRecipeSelector, setShowRecipeSelector] = useState<{dayOfWeek: number, mealType: string} | null>(null);
   const queryClient = useQueryClient();
 
   // Get current week date range for display
@@ -18,12 +19,12 @@ export default function MealPlanner() {
     return `${start.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}-${end.getDate()}, ${start.getFullYear()}`;
   };
 
-  const { data: mealPlans = [], isLoading: loadingMealPlans } = useQuery({
+  const { data: mealPlans = [], isLoading: loadingMealPlans } = useQuery<MealPlan[]>({
     queryKey: ["/api/meal-plans", currentWeek],
     enabled: !!currentWeek,
   });
 
-  const { data: recipes = [] } = useQuery({
+  const { data: recipes = [] } = useQuery<Recipe[]>({
     queryKey: ["/api/recipes"],
   });
 
@@ -44,6 +45,16 @@ export default function MealPlanner() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/meal-plans", currentWeek] });
+      setShowRecipeSelector(null);
+    },
+  });
+
+  const deleteMealMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/meal-plans/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meal-plans", currentWeek] });
     },
   });
 
@@ -56,6 +67,22 @@ export default function MealPlanner() {
 
   const generateWeeklyPlan = async () => {
     await generateGroceryListMutation.mutateAsync(currentWeek);
+  };
+
+  const addRecipeToMeal = (recipe: Recipe) => {
+    if (!showRecipeSelector) return;
+    
+    addMealMutation.mutate({
+      weekStartDate: currentWeek,
+      dayOfWeek: showRecipeSelector.dayOfWeek,
+      mealType: showRecipeSelector.mealType,
+      recipeId: recipe.id,
+      isLeftover: false
+    });
+  };
+
+  const deleteMeal = (mealId: string) => {
+    deleteMealMutation.mutate(mealId);
   };
 
   const getDayMeals = (dayOfWeek: number) => {
@@ -171,6 +198,7 @@ export default function MealPlanner() {
                     {day.name}, {dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </h3>
                   <button 
+                    onClick={() => setShowRecipeSelector({dayOfWeek: day.dayOfWeek, mealType: 'dinner'})}
                     className="text-muted-foreground hover:text-accent transition-colors"
                     data-testid={`button-add-meal-${day.dayOfWeek}`}
                   >
@@ -197,13 +225,24 @@ export default function MealPlanner() {
                       </div>
 
                       {meal && recipe ? (
-                        <div data-testid={`meal-${meal.id}`}>
-                          <p className="text-sm text-card-foreground" data-testid={`text-meal-name-${meal.id}`}>
-                            {recipe.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {recipe.cuisine} • {recipe.effortLevel} effort
-                          </p>
+                        <div data-testid={`meal-${meal.id}`} className="group">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <p className="text-sm text-card-foreground" data-testid={`text-meal-name-${meal.id}`}>
+                                {recipe.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {recipe.cuisine} • {recipe.effortLevel} effort
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => deleteMeal(meal.id)}
+                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                              data-testid={`button-delete-meal-${meal.id}`}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
                           <div className="flex items-center mt-2 space-x-2">
                             {recipe.makesLeftovers && (
                               <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
@@ -237,12 +276,13 @@ export default function MealPlanner() {
                         </div>
                       ) : (
                         <div className="flex items-center justify-between">
-                          <p className="text-sm text-muted-foreground italic">Click to add a meal</p>
+                          <p className="text-sm text-muted-foreground italic">Click + to add a meal</p>
                           <button 
+                            onClick={() => setShowRecipeSelector({dayOfWeek: day.dayOfWeek, mealType})}
                             className="text-xs text-primary hover:text-primary/80 transition-colors"
                             data-testid={`button-suggest-meal-${day.dayOfWeek}-${mealType}`}
                           >
-                            <i className="fas fa-lightbulb mr-1"></i>Suggest
+                            Quick Add
                           </button>
                         </div>
                       )}
@@ -277,6 +317,67 @@ export default function MealPlanner() {
           </Button>
         </div>
       </div>
+
+      {/* Recipe Selector Modal */}
+      {showRecipeSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">
+                Select Recipe for {weekDays.find(d => d.dayOfWeek === showRecipeSelector.dayOfWeek)?.name} {showRecipeSelector.mealType}
+              </h3>
+              <button 
+                onClick={() => setShowRecipeSelector(null)}
+                className="text-muted-foreground hover:text-foreground"
+                data-testid="button-close-recipe-selector"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid gap-3">
+                {recipes.map((recipe: Recipe) => (
+                  <div 
+                    key={recipe.id} 
+                    className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => addRecipeToMeal(recipe)}
+                    data-testid={`recipe-option-${recipe.id}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium">{recipe.name}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {recipe.cuisine} • {recipe.effortLevel} effort • Serves {recipe.servings}
+                        </p>
+                      </div>
+                      <div className="flex space-x-1">
+                        {renderStars(getAverageRating(recipe.id))}
+                      </div>
+                    </div>
+                    <div className="flex items-center mt-2 space-x-2">
+                      {recipe.makesLeftovers && (
+                        <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
+                          Makes Leftovers
+                        </span>
+                      )}
+                      {recipe.nonPerishableBase && (
+                        <span className="text-xs bg-secondary/20 text-secondary px-2 py-1 rounded-full">
+                          Non-Perishable Base
+                        </span>
+                      )}
+                      {recipe.effortLevel === "low" && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                          Low Effort
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
