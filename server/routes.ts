@@ -7,7 +7,8 @@ import {
   insertRecipeRatingSchema,
   insertGroceryItemSchema,
   insertPantryItemSchema,
-  insertStoreSchema 
+  insertStoreSchema,
+  insertIngredientStorePreferenceSchema
 } from "@shared/schema";
 import { z } from "zod";
 
@@ -274,6 +275,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/stores/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteStore(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Store not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete store" });
+    }
+  });
+
+  // Ingredient Store Preferences
+  app.get("/api/ingredient-preferences", async (req, res) => {
+    try {
+      const ingredient = req.query.ingredient as string;
+      const preferences = await storage.getIngredientStorePreferences(ingredient);
+      res.json(preferences);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch ingredient preferences" });
+    }
+  });
+
+  app.post("/api/ingredient-preferences", async (req, res) => {
+    try {
+      const preferenceData = insertIngredientStorePreferenceSchema.parse(req.body);
+      const preference = await storage.createIngredientStorePreference(preferenceData);
+      res.status(201).json(preference);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid preference data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create ingredient preference" });
+    }
+  });
+
+  app.put("/api/ingredient-preferences/:id", async (req, res) => {
+    try {
+      const preferenceData = insertIngredientStorePreferenceSchema.partial().parse(req.body);
+      const preference = await storage.updateIngredientStorePreference(req.params.id, preferenceData);
+      if (!preference) {
+        return res.status(404).json({ message: "Ingredient preference not found" });
+      }
+      res.json(preference);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid preference data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update ingredient preference" });
+    }
+  });
+
+  app.delete("/api/ingredient-preferences/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteIngredientStorePreference(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Ingredient preference not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete ingredient preference" });
+    }
+  });
+
   // Generate grocery list from meal plans
   app.post("/api/grocery-lists/generate/:weekStartDate", async (req, res) => {
     try {
@@ -304,7 +369,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 name: ingredient,
                 category,
                 quantity: "1 unit",
-                estimatedPrice: "$3.99",
                 preferredStore,
                 isCompleted: false,
                 isFromMeal: true,

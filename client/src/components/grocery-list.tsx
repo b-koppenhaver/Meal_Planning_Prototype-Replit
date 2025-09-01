@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Share, Trash2, Store, Check } from "lucide-react";
+import { Share, Trash2, Store, Check, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ export default function GroceryList() {
   const [currentWeek] = useState("2024-01-15");
   const [selectedStore, setSelectedStore] = useState("Whole Foods");
   const [newItemName, setNewItemName] = useState("");
+  const [showAddStore, setShowAddStore] = useState(false);
+  const [newStoreName, setNewStoreName] = useState("");
   const queryClient = useQueryClient();
 
   const { data: groceryItems = [], isLoading } = useQuery({
@@ -52,6 +54,27 @@ export default function GroceryList() {
     },
   });
 
+  const addStoreMutation = useMutation({
+    mutationFn: async (store: any) => {
+      const response = await apiRequest("POST", "/api/stores", store);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+      setNewStoreName("");
+      setShowAddStore(false);
+    },
+  });
+
+  const deleteStoreMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/stores/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stores"] });
+    },
+  });
+
   const toggleItemCompleted = (item: GroceryItem) => {
     updateItemMutation.mutate({
       id: item.id,
@@ -74,11 +97,21 @@ export default function GroceryList() {
       name: newItemName,
       category: "Custom",
       quantity: "1 unit",
-      estimatedPrice: "$3.99",
       preferredStore: selectedStore,
       isCompleted: false,
       isFromMeal: false,
       weekStartDate: currentWeek,
+    });
+  };
+
+  const addNewStore = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStoreName.trim()) return;
+
+    addStoreMutation.mutate({
+      name: newStoreName,
+      categories: ["pantry", "produce"],
+      isPreferred: false,
     });
   };
 
@@ -106,11 +139,8 @@ export default function GroceryList() {
 
   const getTotalStats = () => {
     const total = groceryItems.length;
-    const estimated = groceryItems.reduce((sum: number, item: GroceryItem) => {
-      const price = parseFloat(item.estimatedPrice?.replace('$', '') || '0');
-      return sum + price;
-    }, 0);
-    return { total, estimated };
+    const completed = groceryItems.filter((item: GroceryItem) => item.isCompleted).length;
+    return { total, completed };
   };
 
   const getCategoryIcon = (category: string) => {
@@ -171,24 +201,73 @@ export default function GroceryList() {
         
         <div className="flex space-x-2 overflow-x-auto custom-scrollbar mb-3">
           {stores.map((store: StoreType) => (
-            <button
-              key={store.id}
-              onClick={() => setSelectedStore(store.name)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                selectedStore === store.name
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-              data-testid={`button-store-${store.name.toLowerCase().replace(' ', '-')}`}
-            >
-              <Store className="mr-2" size={16} />
-              {store.name}
-            </button>
+            <div key={store.id} className="flex-shrink-0 flex items-center space-x-1">
+              <button
+                onClick={() => setSelectedStore(store.name)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  selectedStore === store.name
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+                data-testid={`button-store-${store.name.toLowerCase().replace(' ', '-')}`}
+              >
+                <Store className="mr-2" size={16} />
+                {store.name}
+              </button>
+              {!store.isPreferred && (
+                <button
+                  onClick={() => deleteStoreMutation.mutate(store.id)}
+                  className="p-1 rounded hover:bg-destructive/20 transition-colors"
+                  data-testid={`button-delete-store-${store.id}`}
+                >
+                  <X className="text-destructive" size={12} />
+                </button>
+              )}
+            </div>
           ))}
+          
+          {showAddStore ? (
+            <form onSubmit={addNewStore} className="flex-shrink-0 flex items-center space-x-2">
+              <input
+                type="text"
+                placeholder="Store name..."
+                value={newStoreName}
+                onChange={(e) => setNewStoreName(e.target.value)}
+                className="px-3 py-2 border rounded-lg text-sm"
+                data-testid="input-new-store-name"
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={!newStoreName.trim() || addStoreMutation.isPending}
+                className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+                data-testid="button-save-store"
+              >
+                <Check size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowAddStore(false); setNewStoreName(""); }}
+                className="p-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80"
+                data-testid="button-cancel-store"
+              >
+                <X size={12} />
+              </button>
+            </form>
+          ) : (
+            <button
+              onClick={() => setShowAddStore(true)}
+              className="flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+              data-testid="button-add-store"
+            >
+              <Plus className="mr-2" size={16} />
+              Add Store
+            </button>
+          )}
         </div>
         
         <div className="text-sm text-muted-foreground" data-testid="text-list-stats">
-          <span>{stats.total} items • ${stats.estimated.toFixed(2)} estimated</span>
+          <span>{stats.total} items • {stats.completed} completed</span>
         </div>
       </div>
 
@@ -251,11 +330,14 @@ export default function GroceryList() {
                             </p>
                           </div>
                           
-                          <span className={`text-sm font-medium ${
-                            item.isCompleted ? 'text-muted-foreground' : 'text-card-foreground'
-                          }`} data-testid={`text-item-price-${item.id}`}>
-                            {item.estimatedPrice}
-                          </span>
+                          <div className="flex items-center space-x-2">
+                            <button 
+                              className="text-xs text-muted-foreground hover:text-accent transition-colors"
+                              data-testid={`button-change-store-${item.id}`}
+                            >
+                              Change Store
+                            </button>
+                          </div>
                         </CardContent>
                       </Card>
                     ))}

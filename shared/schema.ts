@@ -7,7 +7,7 @@ export const recipes = pgTable("recipes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   cuisine: text("cuisine").notNull(),
-  prepTime: integer("prep_time").notNull(), // in minutes
+  effortLevel: text("effort_level").notNull(), // low, medium, high
   servings: integer("servings").notNull(),
   ingredients: jsonb("ingredients").notNull().$type<string[]>(),
   instructions: text("instructions").notNull(),
@@ -22,7 +22,7 @@ export const mealPlans = pgTable("meal_plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   weekStartDate: text("week_start_date").notNull(), // YYYY-MM-DD format
   dayOfWeek: integer("day_of_week").notNull(), // 0-6 (Sunday-Saturday)
-  mealType: text("meal_type").notNull(), // breakfast, lunch, dinner
+  mealType: text("meal_type").notNull().default("dinner"), // only dinner now
   recipeId: varchar("recipe_id").references(() => recipes.id),
   customMealName: text("custom_meal_name"),
   isLeftover: boolean("is_leftover").default(false),
@@ -42,7 +42,6 @@ export const groceryItems = pgTable("grocery_items", {
   name: text("name").notNull(),
   category: text("category").notNull(),
   quantity: text("quantity").notNull(),
-  estimatedPrice: text("estimated_price"),
   preferredStore: text("preferred_store").notNull(),
   isCompleted: boolean("is_completed").default(false),
   isFromMeal: boolean("is_from_meal").default(false),
@@ -67,6 +66,14 @@ export const stores = pgTable("stores", {
   name: text("name").notNull(),
   categories: jsonb("categories").notNull().$type<string[]>(),
   isPreferred: boolean("is_preferred").default(false),
+});
+
+export const ingredientStorePreferences = pgTable("ingredient_store_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ingredient: text("ingredient").notNull(),
+  storeId: varchar("store_id").references(() => stores.id).notNull(),
+  preferenceRank: integer("preference_rank").notNull(), // 1 = most preferred
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Insert schemas
@@ -100,6 +107,11 @@ export const insertStoreSchema = createInsertSchema(stores).omit({
   id: true,
 });
 
+export const insertIngredientStorePreferenceSchema = createInsertSchema(ingredientStorePreferences).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Recipe = typeof recipes.$inferSelect;
 export type InsertRecipe = z.infer<typeof insertRecipeSchema>;
@@ -118,3 +130,6 @@ export type InsertPantryItem = z.infer<typeof insertPantryItemSchema>;
 
 export type Store = typeof stores.$inferSelect;
 export type InsertStore = z.infer<typeof insertStoreSchema>;
+
+export type IngredientStorePreference = typeof ingredientStorePreferences.$inferSelect;
+export type InsertIngredientStorePreference = z.infer<typeof insertIngredientStorePreferenceSchema>;
