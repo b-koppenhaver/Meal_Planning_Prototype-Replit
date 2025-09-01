@@ -36,7 +36,7 @@ export default function RecipeDatabase() {
     },
   });
 
-  const filters = ["All", "Favorites", "Quick Meals", "Italian", "Mexican", "Indian", "American"];
+  const filters = ["All", "Favorites", "Low Effort", "Italian", "Mexican", "Indian", "American"];
 
   const filteredRecipes = recipes.filter((recipe: Recipe) => {
     const matchesSearch = recipe.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -47,7 +47,7 @@ export default function RecipeDatabase() {
     
     if (selectedFilter === "All") return true;
     if (selectedFilter === "Favorites") return getAverageRating(recipe.id) === 3;
-    if (selectedFilter === "Quick Meals") return recipe.prepTime <= 30;
+    if (selectedFilter === "Low Effort") return recipe.effortLevel === "low";
     
     return recipe.cuisine.toLowerCase() === selectedFilter.toLowerCase();
   });
@@ -178,7 +178,7 @@ export default function RecipeDatabase() {
                   </div>
                   
                   <p className="text-xs text-muted-foreground mb-3" data-testid={`text-recipe-details-${recipe.id}`}>
-                    {recipe.cuisine} • {recipe.prepTime} min • Serves {recipe.servings}
+                    {recipe.cuisine} • {recipe.effortLevel} effort • Serves {recipe.servings}
                   </p>
                   
                   <div className="flex items-center justify-between">
@@ -198,9 +198,9 @@ export default function RecipeDatabase() {
                           Non-Perishable Base
                         </span>
                       )}
-                      {recipe.prepTime <= 30 && (
+                      {recipe.effortLevel === "low" && (
                         <span className="text-xs bg-muted/60 text-muted-foreground px-2 py-1 rounded-full">
-                          Quick Prep
+                          Low Effort
                         </span>
                       )}
                     </div>

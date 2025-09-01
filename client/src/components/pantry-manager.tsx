@@ -96,7 +96,6 @@ export default function PantryManager() {
       name: item.name,
       category: item.category,
       quantity: "1 unit",
-      estimatedPrice: "$3.99",
       preferredStore: "Whole Foods",
       isCompleted: false,
       isFromMeal: false,

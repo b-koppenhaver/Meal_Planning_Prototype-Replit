@@ -100,7 +100,7 @@ export default function MealPlanner() {
     { name: "Sunday", short: "SUN", dayOfWeek: 0 },
   ];
 
-  const mealTypes = ["breakfast", "lunch", "dinner"];
+  const mealTypes = ["dinner"];
 
   if (loadingMealPlans) {
     return (
@@ -202,7 +202,7 @@ export default function MealPlanner() {
                             {recipe.name}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {recipe.cuisine} • {recipe.prepTime} min
+                            {recipe.cuisine} • {recipe.effortLevel} effort
                           </p>
                           <div className="flex items-center mt-2 space-x-2">
                             {recipe.makesLeftovers && (

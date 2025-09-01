@@ -4,7 +4,8 @@ import {
   type RecipeRating, type InsertRecipeRating,
   type GroceryItem, type InsertGroceryItem,
   type PantryItem, type InsertPantryItem,
-  type Store, type InsertStore
+  type Store, type InsertStore,
+  type IngredientStorePreference, type InsertIngredientStorePreference
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -43,6 +44,13 @@ export interface IStorage {
   getStores(): Promise<Store[]>;
   createStore(store: InsertStore): Promise<Store>;
   updateStore(id: string, store: Partial<InsertStore>): Promise<Store | undefined>;
+  deleteStore(id: string): Promise<boolean>;
+
+  // Ingredient Store Preferences
+  getIngredientStorePreferences(ingredient?: string): Promise<IngredientStorePreference[]>;
+  createIngredientStorePreference(preference: InsertIngredientStorePreference): Promise<IngredientStorePreference>;
+  updateIngredientStorePreference(id: string, preference: Partial<InsertIngredientStorePreference>): Promise<IngredientStorePreference | undefined>;
+  deleteIngredientStorePreference(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -52,6 +60,7 @@ export class MemStorage implements IStorage {
   private groceryItems: Map<string, GroceryItem> = new Map();
   private pantryItems: Map<string, PantryItem> = new Map();
   private stores: Map<string, Store> = new Map();
+  private ingredientStorePreferences: Map<string, IngredientStorePreference> = new Map();
 
   constructor() {
     this.initializeDefaultData();
@@ -75,7 +84,7 @@ export class MemStorage implements IStorage {
       {
         name: "Spaghetti Carbonara",
         cuisine: "Italian",
-        prepTime: 30,
+        effortLevel: "medium",
         servings: 4,
         ingredients: ["spaghetti pasta", "eggs", "parmesan cheese", "bacon", "black pepper"],
         instructions: "Cook pasta, fry bacon, mix with eggs and cheese, combine with pasta.",
@@ -87,7 +96,7 @@ export class MemStorage implements IStorage {
       {
         name: "Chicken Tikka Masala",
         cuisine: "Indian",
-        prepTime: 45,
+        effortLevel: "high",
         servings: 6,
         ingredients: ["chicken breast", "coconut milk", "tomato sauce", "garam masala", "basmati rice"],
         instructions: "Marinate chicken, cook in spiced tomato sauce, serve with rice.",
@@ -97,21 +106,21 @@ export class MemStorage implements IStorage {
         imageUrl: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&h=600&fit=crop"
       },
       {
-        name: "Overnight Oats with Berries",
-        cuisine: "American",
-        prepTime: 5,
+        name: "Simple Pasta with Marinara",
+        cuisine: "Italian",
+        effortLevel: "low",
         servings: 2,
-        ingredients: ["rolled oats", "milk", "mixed berries", "honey", "chia seeds"],
-        instructions: "Mix oats with milk and honey, refrigerate overnight, top with berries.",
-        tags: ["breakfast", "healthy", "no-cook"],
+        ingredients: ["pasta", "marinara sauce", "parmesan cheese", "basil"],
+        instructions: "Cook pasta, heat sauce, combine and serve with cheese.",
+        tags: ["dinner", "simple", "quick"],
         makesLeftovers: false,
-        nonPerishableBase: false,
+        nonPerishableBase: true,
         imageUrl: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=800&h=600&fit=crop"
       },
       {
         name: "Beef Tacos",
         cuisine: "Mexican",
-        prepTime: 25,
+        effortLevel: "medium",
         servings: 4,
         ingredients: ["ground beef", "taco shells", "lettuce", "tomatoes", "cheese", "sour cream"],
         instructions: "Cook ground beef with spices, warm taco shells, assemble with toppings.",
@@ -140,6 +149,32 @@ export class MemStorage implements IStorage {
       const now = new Date();
       this.pantryItems.set(id, { ...item, id, createdAt: now, updatedAt: now });
     });
+
+    // Initialize ingredient store preferences
+    const storeArray = Array.from(this.stores.values());
+    const wholeFoods = storeArray.find(s => s.name === "Whole Foods");
+    const target = storeArray.find(s => s.name === "Target");
+    const costco = storeArray.find(s => s.name === "Costco");
+
+    if (wholeFoods && target && costco) {
+      const defaultPreferences: InsertIngredientStorePreference[] = [
+        { ingredient: "chicken breast", storeId: wholeFoods.id, preferenceRank: 1 },
+        { ingredient: "chicken breast", storeId: costco.id, preferenceRank: 2 },
+        { ingredient: "ground beef", storeId: costco.id, preferenceRank: 1 },
+        { ingredient: "ground beef", storeId: wholeFoods.id, preferenceRank: 2 },
+        { ingredient: "spaghetti pasta", storeId: target.id, preferenceRank: 1 },
+        { ingredient: "spaghetti pasta", storeId: wholeFoods.id, preferenceRank: 2 },
+        { ingredient: "marinara sauce", storeId: target.id, preferenceRank: 1 },
+        { ingredient: "marinara sauce", storeId: wholeFoods.id, preferenceRank: 2 },
+        { ingredient: "parmesan cheese", storeId: wholeFoods.id, preferenceRank: 1 },
+        { ingredient: "parmesan cheese", storeId: target.id, preferenceRank: 2 },
+      ];
+
+      defaultPreferences.forEach(pref => {
+        const id = randomUUID();
+        this.ingredientStorePreferences.set(id, { ...pref, id, createdAt: new Date() });
+      });
+    }
   }
 
   // Recipes
@@ -287,6 +322,38 @@ export class MemStorage implements IStorage {
     const updated = { ...existing, ...store };
     this.stores.set(id, updated);
     return updated;
+  }
+
+  async deleteStore(id: string): Promise<boolean> {
+    return this.stores.delete(id);
+  }
+
+  // Ingredient Store Preferences
+  async getIngredientStorePreferences(ingredient?: string): Promise<IngredientStorePreference[]> {
+    const allPreferences = Array.from(this.ingredientStorePreferences.values());
+    if (ingredient) {
+      return allPreferences.filter(pref => pref.ingredient === ingredient);
+    }
+    return allPreferences;
+  }
+
+  async createIngredientStorePreference(preference: InsertIngredientStorePreference): Promise<IngredientStorePreference> {
+    const id = randomUUID();
+    const newPreference: IngredientStorePreference = { ...preference, id, createdAt: new Date() };
+    this.ingredientStorePreferences.set(id, newPreference);
+    return newPreference;
+  }
+
+  async updateIngredientStorePreference(id: string, preference: Partial<InsertIngredientStorePreference>): Promise<IngredientStorePreference | undefined> {
+    const existing = this.ingredientStorePreferences.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...preference };
+    this.ingredientStorePreferences.set(id, updated);
+    return updated;
+  }
+
+  async deleteIngredientStorePreference(id: string): Promise<boolean> {
+    return this.ingredientStorePreferences.delete(id);
   }
 }
 
